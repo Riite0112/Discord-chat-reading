@@ -3,6 +3,7 @@ const DEFAULT_SETTINGS = {
   rate: 1,
   pitch: 1,
   volume: 1,
+  language: "ja",
   lang: "ja-JP",
   voiceName: "",
   readAuthorName: true,

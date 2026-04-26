@@ -1,5 +1,6 @@
 const DEFAULT_SETTINGS = {
   enabled: true,
+  language: "ja",
   readAuthorName: true,
   announceLinks: true,
   announceImages: false,
@@ -64,8 +65,39 @@ const TRANSIENT_PHRASES = new Set([
   "URL\u3092\u9001\u4fe1\u3057\u307e\u3057\u305f",
   "\u30ea\u30f3\u30af\u3092\u9001\u4fe1\u3057\u307e\u3057\u305f",
   "\u753b\u50cf\u3092\u9001\u4fe1\u3057\u307e\u3057\u305f",
-  "\u7d75\u6587\u5b57\u3092\u9001\u4fe1\u3057\u307e\u3057\u305f"
+  "\u7d75\u6587\u5b57\u3092\u9001\u4fe1\u3057\u307e\u3057\u305f",
+  "sent a URL",
+  "sent an image",
+  "sent an emoji",
+  "\u53d1\u9001\u4e86 URL",
+  "\u53d1\u9001\u4e86\u56fe\u7247",
+  "\u53d1\u9001\u4e86\u8868\u60c5",
+  "URL\uc744 \ubcf4\ub0c8\uc2b5\ub2c8\ub2e4",
+  "\uc774\ubbf8\uc9c0\ub97c \ubcf4\ub0c8\uc2b5\ub2c8\ub2e4",
+  "\uc774\ubaa8\uc9c0\ub97c \ubcf4\ub0c8\uc2b5\ub2c8\ub2e4"
 ]);
+const NOTICE_TEXT = {
+  ja: {
+    url: "URL\u3092\u9001\u4fe1\u3057\u307e\u3057\u305f",
+    image: "\u753b\u50cf\u3092\u9001\u4fe1\u3057\u307e\u3057\u305f",
+    emoji: "\u7d75\u6587\u5b57\u3092\u9001\u4fe1\u3057\u307e\u3057\u305f"
+  },
+  en: {
+    url: "sent a URL",
+    image: "sent an image",
+    emoji: "sent an emoji"
+  },
+  zh: {
+    url: "\u53d1\u9001\u4e86 URL",
+    image: "\u53d1\u9001\u4e86\u56fe\u7247",
+    emoji: "\u53d1\u9001\u4e86\u8868\u60c5"
+  },
+  ko: {
+    url: "URL\uc744 \ubcf4\ub0c8\uc2b5\ub2c8\ub2e4",
+    image: "\uc774\ubbf8\uc9c0\ub97c \ubcf4\ub0c8\uc2b5\ub2c8\ub2e4",
+    emoji: "\uc774\ubaa8\uc9c0\ub97c \ubcf4\ub0c8\uc2b5\ub2c8\ub2e4"
+  }
+};
 
 const seenMessages = new Set();
 const activeMessageKeys = new Set();
@@ -90,6 +122,15 @@ function isElement(value) {
 
 function normalizeWhitespace(text) {
   return text.replace(/\s+/g, " ").trim();
+}
+
+function getLanguageCode() {
+  return Object.prototype.hasOwnProperty.call(NOTICE_TEXT, settings.language) ? settings.language : "ja";
+}
+
+function noticeText(key) {
+  const language = getLanguageCode();
+  return NOTICE_TEXT[language]?.[key] || NOTICE_TEXT.ja[key] || "";
 }
 
 function padNumber(value) {
@@ -373,15 +414,15 @@ function buildSpeechText(author, parts) {
   }
 
   if (hasLinks && settings.announceLinks) {
-    segments.push(formatNotice("URL\u3092\u9001\u4fe1\u3057\u307e\u3057\u305f"));
+    segments.push(formatNotice(noticeText("url")));
   }
 
   if (hasImages && settings.announceImages) {
-    segments.push(formatNotice("\u753b\u50cf\u3092\u9001\u4fe1\u3057\u307e\u3057\u305f"));
+    segments.push(formatNotice(noticeText("image")));
   }
 
   if (hasEmojiOnly && settings.announceEmojiMessages) {
-    segments.push(formatNotice("\u7d75\u6587\u5b57\u3092\u9001\u4fe1\u3057\u307e\u3057\u305f"));
+    segments.push(formatNotice(noticeText("emoji")));
   }
 
   return normalizeWhitespace(segments.join(" "));

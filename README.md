@@ -22,6 +22,7 @@ Prototype Chrome extension for reading Discord Web chat aloud.
 - Skips embeds and media-heavy accessories as much as possible
 - Tries not to read badge-like UI around usernames
 - Strips badge-like labels such as `[NEKO]` and `YouTube Member: ...` from speech text
+- Supports Japanese, English, Chinese, and Korean UI / notice text
 - Popup controls for enable/disable, rate up to 2.0x, pitch, volume, voice, and reading rules
 - Test playback button to confirm Chrome TTS is working
 - Toolbar icon changes between ON and OFF states
