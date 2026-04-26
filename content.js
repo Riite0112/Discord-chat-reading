@@ -61,6 +61,7 @@ const MESSAGE_DEDUPE_TTL_MS = 15000;
 const TEXT_DEDUPE_TTL_MS = 15000;
 const HISTORY_GUARD_MS = 20000;
 const TRANSIENT_PHRASES = new Set([
+  "URL\u3092\u9001\u4fe1\u3057\u307e\u3057\u305f",
   "\u30ea\u30f3\u30af\u3092\u9001\u4fe1\u3057\u307e\u3057\u305f",
   "\u753b\u50cf\u3092\u9001\u4fe1\u3057\u307e\u3057\u305f",
   "\u7d75\u6587\u5b57\u3092\u9001\u4fe1\u3057\u307e\u3057\u305f"
@@ -365,33 +366,22 @@ function buildSpeechText(author, parts) {
   }
 
   const segments = [];
+  const formatNotice = (text) => (settings.readAuthorName && safeAuthor && segments.length === 0 ? `${safeAuthor}: ${text}` : text);
 
   if (safeText) {
     segments.push(settings.readAuthorName && safeAuthor ? `${safeAuthor}: ${safeText}` : safeText);
   }
 
   if (hasLinks && settings.announceLinks) {
-    segments.push(
-      settings.readAuthorName && safeAuthor && segments.length === 0
-        ? `${safeAuthor}\u304c\u30ea\u30f3\u30af\u3092\u9001\u4fe1\u3057\u307e\u3057\u305f`
-        : "\u30ea\u30f3\u30af\u3092\u9001\u4fe1\u3057\u307e\u3057\u305f"
-    );
+    segments.push(formatNotice("URL\u3092\u9001\u4fe1\u3057\u307e\u3057\u305f"));
   }
 
   if (hasImages && settings.announceImages) {
-    segments.push(
-      settings.readAuthorName && safeAuthor && segments.length === 0
-        ? `${safeAuthor}\u304c\u753b\u50cf\u3092\u9001\u4fe1\u3057\u307e\u3057\u305f`
-        : "\u753b\u50cf\u3092\u9001\u4fe1\u3057\u307e\u3057\u305f"
-    );
+    segments.push(formatNotice("\u753b\u50cf\u3092\u9001\u4fe1\u3057\u307e\u3057\u305f"));
   }
 
   if (hasEmojiOnly && settings.announceEmojiMessages) {
-    segments.push(
-      settings.readAuthorName && safeAuthor && segments.length === 0
-        ? `${safeAuthor}\u304c\u7d75\u6587\u5b57\u3092\u9001\u4fe1\u3057\u307e\u3057\u305f`
-        : "\u7d75\u6587\u5b57\u3092\u9001\u4fe1\u3057\u307e\u3057\u305f"
-    );
+    segments.push(formatNotice("\u7d75\u6587\u5b57\u3092\u9001\u4fe1\u3057\u307e\u3057\u305f"));
   }
 
   return normalizeWhitespace(segments.join(" "));
@@ -405,7 +395,9 @@ function buildSpeechKey(parsed) {
 }
 
 function isTransientSpeech(parsed) {
-  return TRANSIENT_PHRASES.has(normalizeWhitespace(parsed.speechText || ""));
+  const speechText = normalizeWhitespace(parsed.speechText || "");
+  const speechTextWithoutAuthor = speechText.replace(/^.{1,80}:\s*/, "");
+  return TRANSIENT_PHRASES.has(speechText) || TRANSIENT_PHRASES.has(speechTextWithoutAuthor);
 }
 
 function syncRecentSpeechKeysFromLog() {
