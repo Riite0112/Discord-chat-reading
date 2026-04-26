@@ -31,6 +31,7 @@ Prototype Chrome extension for reading Discord Web chat aloud.
 
 - Open Discord in Chrome
 - Keep the target text chat visible
+- After opening the target chat, press `Test playback` first to confirm audio works
 - Enable the extension
 - Listen for newly added chat messages
 

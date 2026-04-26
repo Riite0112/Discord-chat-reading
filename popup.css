@@ -187,6 +187,11 @@ output,
   line-height: 1.5;
 }
 
+.testHint {
+  margin-top: -6px;
+  margin-bottom: 14px;
+}
+
 .authorList {
   display: grid;
   gap: 8px;

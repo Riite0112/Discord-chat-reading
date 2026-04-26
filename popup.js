@@ -34,6 +34,7 @@ const stateCard = document.getElementById("stateCard");
 const stateBadge = document.getElementById("stateBadge");
 const stateText = document.getElementById("stateText");
 const statusText = document.getElementById("status");
+const testHint = document.getElementById("testHint");
 const rateValue = document.getElementById("rateValue");
 const pitchValue = document.getElementById("pitchValue");
 const volumeValue = document.getElementById("volumeValue");
@@ -88,6 +89,7 @@ function applyStaticText() {
   enabledLabel.textContent = "\u8aad\u307f\u4e0a\u3052\u3092\u6709\u52b9\u306b\u3059\u308b";
   latestButton.textContent = "\u6700\u65b0\u3092\u8aad\u3080";
   testButton.textContent = "\u30c6\u30b9\u30c8\u518d\u751f";
+  testHint.textContent = "Discord \u306e\u30c1\u30e3\u30c3\u30c8\u3092\u958b\u3044\u305f\u5f8c\u306f\u3001\u6700\u521d\u306b\u30c6\u30b9\u30c8\u518d\u751f\u3092\u62bc\u3057\u3066\u97f3\u304c\u51fa\u308b\u304b\u78ba\u8a8d\u3057\u3066\u304f\u3060\u3055\u3044\u3002";
   voiceLabel.textContent = "\u97f3\u58f0";
   rateLabel.textContent = "\u901f\u5ea6";
   pitchLabel.textContent = "\u9ad8\u3055";
