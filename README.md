@@ -8,6 +8,7 @@ Prototype Chrome extension for reading Discord Web chat aloud.
 - On load or channel switch, existing visible messages are marked as already seen and are not auto-read
 - Prevents recently spoken messages from being replayed again immediately
 - Reads messages as `name: message`
+- Reuses the grouped / last spoken author for Discord continuation messages that do not show a visible name
 - Can skip author names entirely
 - Converts links into a short "link sent" announcement
 - Can disable link announcements entirely

@@ -81,6 +81,7 @@ const recentTextKeys = new Map();
 let historyCutoffMessageId = null;
 let historyCutoffTimestampMs = 0;
 let historyGuardUntil = 0;
+let lastSpokenAuthor = "";
 
 function isElement(value) {
   return value instanceof Element;
@@ -193,6 +194,21 @@ function getAuthor(messageElement) {
   }
 
   return "";
+}
+
+function resolveMessageAuthor(messageElement) {
+  const directAuthor = getAuthorFromNode(messageElement);
+  if (directAuthor) {
+    return {
+      author: directAuthor,
+      hasDirectAuthor: true
+    };
+  }
+
+  return {
+    author: getAuthor(messageElement) || lastSpokenAuthor,
+    hasDirectAuthor: false
+  };
 }
 
 function getMessageTimestampMs(messageElement) {
@@ -443,6 +459,13 @@ function rememberSpeech(parsed) {
   persistSpokenLog();
 }
 
+function rememberLastSpokenAuthor(parsed) {
+  const safeAuthor = sanitizeAuthorText(parsed.author || "");
+  if (safeAuthor) {
+    lastSpokenAuthor = safeAuthor;
+  }
+}
+
 function queueSpeech(text) {
   chrome.runtime.sendMessage({
     type: "QUEUE_SPEECH",
@@ -514,7 +537,8 @@ function rememberRecentText(parsed) {
 }
 
 function parseMessage(messageElement) {
-  const author = getAuthorFromNode(messageElement);
+  const authorInfo = resolveMessageAuthor(messageElement);
+  const author = authorInfo.author;
   const parts = extractMessageParts(messageElement);
   const speechText = buildSpeechText(author, parts);
   const messageId = getMessageId(messageElement);
@@ -523,6 +547,7 @@ function parseMessage(messageElement) {
 
   return {
     author,
+    hasDirectAuthor: authorInfo.hasDirectAuthor,
     bodyText: sanitizeSpeechText(parts.text || ""),
     messageId,
     minuteKey,
@@ -597,7 +622,7 @@ function handleMessageElement(messageElement) {
   const parsed = parseMessage(messageElement);
   seenMessages.add(messageId);
 
-  if (!parsed.author && hasRecentSameText(parsed)) {
+  if (!parsed.hasDirectAuthor && hasRecentSameText(parsed)) {
     return;
   }
 
@@ -618,6 +643,7 @@ function handleMessageElement(messageElement) {
   advanceHistoricalBoundary(parsed);
   rememberRecentText(parsed);
   rememberSpeech(parsed);
+  rememberLastSpokenAuthor(parsed);
   chrome.runtime.sendMessage({
     type: "QUEUE_SPEECH",
     text: parsed.speechText,
@@ -714,7 +740,7 @@ function getLatestParsedMessage(forceReplay = false) {
       continue;
     }
 
-    if (!forceReplay && !parsed.author && hasRecentSameText(parsed)) {
+    if (!forceReplay && !parsed.hasDirectAuthor && hasRecentSameText(parsed)) {
       continue;
     }
 
@@ -742,12 +768,14 @@ function readLatestVisibleMessage(forceReplay = false) {
   wasRecentlyProcessed(parsed);
   rememberRecentText(parsed);
   rememberSpeech(parsed);
+  rememberLastSpokenAuthor(parsed);
   return parsed.speechText;
 }
 
 function beginHydration(resetSeen = false) {
   if (resetSeen) {
     seenMessages.clear();
+    lastSpokenAuthor = "";
   }
 
   isHydrating = true;
