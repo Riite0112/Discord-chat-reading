@@ -24,6 +24,7 @@ Prototype Chrome extension for reading Discord Web chat aloud.
 - Strips badge-like labels such as `[NEKO]` and `YouTube Member: ...` from speech text
 - Supports Japanese, English, Chinese, and Korean UI / notice text
 - Popup controls for enable/disable, rate up to 2.0x, pitch, volume, voice, and reading rules
+- Optional VOICEVOX support for voices such as Zundamon through a local VOICEVOX engine
 - Test playback button to confirm Chrome TTS is working
 - Toolbar icon changes between ON and OFF states
 - Includes Memory Saver guidance for keeping Discord active in the background
@@ -35,6 +36,14 @@ Prototype Chrome extension for reading Discord Web chat aloud.
 - After opening the target chat, press `Test playback` first to confirm audio works
 - Enable the extension
 - Listen for newly added chat messages
+
+## VOICEVOX voices
+
+1. Start VOICEVOX on the same computer
+2. Open the extension popup
+3. Change the speech engine from Chrome voice to VOICEVOX
+4. Click refresh speakers and choose a speaker such as Zundamon
+5. Press `Test playback`
 
 ## Install
 
@@ -49,5 +58,6 @@ Prototype Chrome extension for reading Discord Web chat aloud.
 - This currently targets `https://discord.com/channels/*`
 - On page refresh, visible history is ignored and nothing is auto-read
 - Available voices depend on Chrome and the OS
+- VOICEVOX voices require the local VOICEVOX engine, usually at `http://127.0.0.1:50021`
 - This version cannot choose a physical speaker device directly
 - Audio output follows the current Chrome / OS default output device

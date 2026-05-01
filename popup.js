@@ -5,7 +5,10 @@ const DEFAULT_SETTINGS = {
   volume: 1,
   language: "ja",
   lang: "ja-JP",
+  speechEngine: "chrome",
   voiceName: "",
+  voicevoxEndpoint: "http://127.0.0.1:50021",
+  voicevoxSpeaker: 3,
   readAuthorName: true,
   announceLinks: true,
   announceImages: false,
@@ -20,6 +23,13 @@ const LANGUAGE_OPTIONS = [
   { value: "zh", label: "中文", lang: "zh-CN", locale: "zh-CN" },
   { value: "ko", label: "한국어", lang: "ko-KR", locale: "ko-KR" }
 ];
+const SPEECH_ENGINE_OPTIONS = [
+  { value: "chrome", labelKey: "chromeTts" },
+  { value: "voicevox", labelKey: "voicevox" }
+];
+const DEFAULT_VOICEVOX_SPEAKERS = [
+  { id: 3, name: "ずんだもん - ノーマル" }
+];
 const HELP_URLS = {
   ja: "https://support.google.com/chrome/answer/12929150?hl=ja",
   en: "https://support.google.com/chrome/answer/12929150?hl=en",
@@ -33,7 +43,15 @@ const UI_TEXT = {
     testButton: "テスト再生",
     testHint: "Discord のチャットを開いた後は、最初にテスト再生を押して音が出るか確認してください。",
     languageLabel: "表示と言語",
+    speechEngineLabel: "読み上げ方式",
+    chromeTts: "Chrome 標準音声",
+    voicevox: "VOICEVOX",
     voiceLabel: "音声",
+    voicevoxTitle: "VOICEVOX 設定",
+    voicevoxHint: "ずんだもん等を使う場合は、先にVOICEVOXを起動してください。通常は 127.0.0.1:50021 で接続します。",
+    voicevoxEndpointLabel: "VOICEVOX 接続先",
+    voicevoxSpeakerLabel: "話者",
+    refreshVoicevoxButton: "話者一覧を更新",
     rateLabel: "速度",
     pitchLabel: "高さ",
     volumeLabel: "音量",
@@ -55,6 +73,8 @@ const UI_TEXT = {
     emptyLog: "まだ読み上げログはありません。",
     auto: "自動",
     voiceLoadFailed: "音声一覧を読み込めませんでした。",
+    voicevoxLoadFailed: "VOICEVOXに接続できませんでした。VOICEVOXを起動してから再試行してください。",
+    voicevoxLoaded: "VOICEVOXの話者一覧を読み込みました。",
     openDiscord: "Discord のチャンネルを開いてください。",
     latestRead: "最新メッセージを読み上げました。",
     noLatest: "読み上げ可能な最新メッセージがありません。",
@@ -71,7 +91,15 @@ const UI_TEXT = {
     testButton: "Test playback",
     testHint: "After opening the Discord chat, press Test playback first to confirm audio works.",
     languageLabel: "Display language",
+    speechEngineLabel: "Speech engine",
+    chromeTts: "Chrome voice",
+    voicevox: "VOICEVOX",
     voiceLabel: "Voice",
+    voicevoxTitle: "VOICEVOX settings",
+    voicevoxHint: "To use voices such as Zundamon, start VOICEVOX first. The default endpoint is usually 127.0.0.1:50021.",
+    voicevoxEndpointLabel: "VOICEVOX endpoint",
+    voicevoxSpeakerLabel: "Speaker",
+    refreshVoicevoxButton: "Refresh speakers",
     rateLabel: "Rate",
     pitchLabel: "Pitch",
     volumeLabel: "Volume",
@@ -93,6 +121,8 @@ const UI_TEXT = {
     emptyLog: "No read log yet.",
     auto: "Auto",
     voiceLoadFailed: "Could not load the voice list.",
+    voicevoxLoadFailed: "Could not connect to VOICEVOX. Start VOICEVOX, then try again.",
+    voicevoxLoaded: "Loaded VOICEVOX speakers.",
     openDiscord: "Open a Discord channel first.",
     latestRead: "Read the latest message.",
     noLatest: "No readable latest message found.",
@@ -109,7 +139,15 @@ const UI_TEXT = {
     testButton: "测试播放",
     testHint: "打开 Discord 聊天后，请先按测试播放，确认可以听到声音。",
     languageLabel: "显示语言",
+    speechEngineLabel: "朗读引擎",
+    chromeTts: "Chrome 标准语音",
+    voicevox: "VOICEVOX",
     voiceLabel: "语音",
+    voicevoxTitle: "VOICEVOX 设置",
+    voicevoxHint: "如需使用ずんだもん等声音，请先启动 VOICEVOX。默认连接地址通常是 127.0.0.1:50021。",
+    voicevoxEndpointLabel: "VOICEVOX 连接地址",
+    voicevoxSpeakerLabel: "说话人",
+    refreshVoicevoxButton: "刷新说话人列表",
     rateLabel: "速度",
     pitchLabel: "音高",
     volumeLabel: "音量",
@@ -131,6 +169,8 @@ const UI_TEXT = {
     emptyLog: "暂无朗读记录。",
     auto: "自动",
     voiceLoadFailed: "无法加载语音列表。",
+    voicevoxLoadFailed: "无法连接到 VOICEVOX。请先启动 VOICEVOX 后再重试。",
+    voicevoxLoaded: "已加载 VOICEVOX 说话人列表。",
     openDiscord: "请先打开 Discord 频道。",
     latestRead: "已朗读最新消息。",
     noLatest: "没有可朗读的最新消息。",
@@ -147,7 +187,15 @@ const UI_TEXT = {
     testButton: "테스트 재생",
     testHint: "Discord 채팅을 연 뒤 먼저 테스트 재생을 눌러 소리가 나는지 확인하세요.",
     languageLabel: "표시 언어",
+    speechEngineLabel: "읽기 방식",
+    chromeTts: "Chrome 기본 음성",
+    voicevox: "VOICEVOX",
     voiceLabel: "음성",
+    voicevoxTitle: "VOICEVOX 설정",
+    voicevoxHint: "ずんだもん 같은 음성을 사용하려면 먼저 VOICEVOX를 실행하세요. 기본 주소는 보통 127.0.0.1:50021입니다.",
+    voicevoxEndpointLabel: "VOICEVOX 주소",
+    voicevoxSpeakerLabel: "화자",
+    refreshVoicevoxButton: "화자 목록 새로고침",
     rateLabel: "속도",
     pitchLabel: "높이",
     volumeLabel: "음량",
@@ -169,6 +217,8 @@ const UI_TEXT = {
     emptyLog: "아직 읽기 로그가 없습니다.",
     auto: "자동",
     voiceLoadFailed: "음성 목록을 불러오지 못했습니다.",
+    voicevoxLoadFailed: "VOICEVOX에 연결할 수 없습니다. VOICEVOX를 실행한 뒤 다시 시도하세요.",
+    voicevoxLoaded: "VOICEVOX 화자 목록을 불러왔습니다.",
     openDiscord: "먼저 Discord 채널을 열어 주세요.",
     latestRead: "최신 메시지를 읽었습니다.",
     noLatest: "읽을 수 있는 최신 메시지가 없습니다.",
@@ -186,10 +236,13 @@ const enabledInput = document.getElementById("enabled");
 const latestButton = document.getElementById("latestButton");
 const testButton = document.getElementById("testButton");
 const languageInput = document.getElementById("language");
+const speechEngineInput = document.getElementById("speechEngine");
 const rateInput = document.getElementById("rate");
 const pitchInput = document.getElementById("pitch");
 const volumeInput = document.getElementById("volume");
 const voiceNameInput = document.getElementById("voiceName");
+const voicevoxEndpointInput = document.getElementById("voicevoxEndpoint");
+const voicevoxSpeakerInput = document.getElementById("voicevoxSpeaker");
 const readAuthorNameInput = document.getElementById("readAuthorName");
 const announceLinksInput = document.getElementById("announceLinks");
 const announceImagesInput = document.getElementById("announceImages");
@@ -208,7 +261,15 @@ const volumeValue = document.getElementById("volumeValue");
 const titleText = document.getElementById("titleText");
 const enabledLabel = document.getElementById("enabledLabel");
 const languageLabel = document.getElementById("languageLabel");
+const speechEngineLabel = document.getElementById("speechEngineLabel");
+const chromeVoiceField = document.getElementById("chromeVoiceField");
 const voiceLabel = document.getElementById("voiceLabel");
+const voicevoxPanel = document.getElementById("voicevoxPanel");
+const voicevoxTitle = document.getElementById("voicevoxTitle");
+const voicevoxHint = document.getElementById("voicevoxHint");
+const voicevoxEndpointLabel = document.getElementById("voicevoxEndpointLabel");
+const voicevoxSpeakerLabel = document.getElementById("voicevoxSpeakerLabel");
+const refreshVoicevoxButton = document.getElementById("refreshVoicevoxButton");
 const rateLabel = document.getElementById("rateLabel");
 const pitchLabel = document.getElementById("pitchLabel");
 const volumeLabel = document.getElementById("volumeLabel");
@@ -229,6 +290,7 @@ const logList = document.getElementById("logList");
 let currentSettings = { ...DEFAULT_SETTINGS };
 let knownAuthors = [];
 let spokenLog = [];
+let voicevoxSpeakers = [...DEFAULT_VOICEVOX_SPEAKERS];
 
 function getLanguageOption(language = currentSettings.language) {
   return LANGUAGE_OPTIONS.find((option) => option.value === language) || LANGUAGE_OPTIONS[0];
@@ -282,6 +344,36 @@ function renderLanguageOptions(selectedLanguage) {
   languageInput.value = getLanguageOption(selectedLanguage).value;
 }
 
+function renderSpeechEngineOptions(selectedEngine) {
+  speechEngineInput.textContent = "";
+
+  for (const option of SPEECH_ENGINE_OPTIONS) {
+    const optionElement = document.createElement("option");
+    optionElement.value = option.value;
+    optionElement.textContent = t(option.labelKey);
+    speechEngineInput.append(optionElement);
+  }
+
+  speechEngineInput.value = selectedEngine === "voicevox" ? "voicevox" : "chrome";
+}
+
+function renderVoicevoxSpeakers(selectedSpeaker) {
+  voicevoxSpeakerInput.textContent = "";
+
+  const speakers = voicevoxSpeakers.length > 0 ? voicevoxSpeakers : DEFAULT_VOICEVOX_SPEAKERS;
+  for (const speaker of speakers) {
+    const optionElement = document.createElement("option");
+    optionElement.value = String(speaker.id);
+    optionElement.textContent = speaker.name;
+    voicevoxSpeakerInput.append(optionElement);
+  }
+
+  const selectedValue = String(selectedSpeaker || DEFAULT_SETTINGS.voicevoxSpeaker);
+  voicevoxSpeakerInput.value = speakers.some((speaker) => String(speaker.id) === selectedValue)
+    ? selectedValue
+    : String(DEFAULT_SETTINGS.voicevoxSpeaker);
+}
+
 function applyStaticText() {
   const language = getLanguageCode();
   document.documentElement.lang = getLanguageOption(language).lang;
@@ -291,7 +383,13 @@ function applyStaticText() {
   testButton.textContent = t("testButton");
   testHint.textContent = t("testHint");
   languageLabel.textContent = t("languageLabel");
+  speechEngineLabel.textContent = t("speechEngineLabel");
   voiceLabel.textContent = t("voiceLabel");
+  voicevoxTitle.textContent = t("voicevoxTitle");
+  voicevoxHint.textContent = t("voicevoxHint");
+  voicevoxEndpointLabel.textContent = t("voicevoxEndpointLabel");
+  voicevoxSpeakerLabel.textContent = t("voicevoxSpeakerLabel");
+  refreshVoicevoxButton.textContent = t("refreshVoicevoxButton");
   rateLabel.textContent = t("rateLabel");
   pitchLabel.textContent = t("pitchLabel");
   volumeLabel.textContent = t("volumeLabel");
@@ -414,12 +512,22 @@ function render(settings) {
   currentSettings = { ...currentSettings, ...settings };
   applyStaticText();
   renderLanguageOptions(currentSettings.language);
+  renderSpeechEngineOptions(currentSettings.speechEngine);
+  renderVoicevoxSpeakers(currentSettings.voicevoxSpeaker);
   enabledInput.checked = currentSettings.enabled;
   languageInput.value = getLanguageCode(currentSettings);
+  speechEngineInput.value = currentSettings.speechEngine === "voicevox" ? "voicevox" : "chrome";
   rateInput.value = String(currentSettings.rate);
   pitchInput.value = String(currentSettings.pitch);
   volumeInput.value = String(currentSettings.volume);
   voiceNameInput.value = currentSettings.voiceName || "";
+  voicevoxEndpointInput.value = currentSettings.voicevoxEndpoint || DEFAULT_SETTINGS.voicevoxEndpoint;
+  const selectedVoicevoxSpeaker = String(currentSettings.voicevoxSpeaker || DEFAULT_SETTINGS.voicevoxSpeaker);
+  if (Array.from(voicevoxSpeakerInput.options).some((option) => option.value === selectedVoicevoxSpeaker)) {
+    voicevoxSpeakerInput.value = selectedVoicevoxSpeaker;
+  }
+  chromeVoiceField.hidden = currentSettings.speechEngine === "voicevox";
+  voicevoxPanel.hidden = currentSettings.speechEngine !== "voicevox";
   readAuthorNameInput.checked = currentSettings.readAuthorName;
   announceLinksInput.checked = currentSettings.announceLinks;
   announceImagesInput.checked = currentSettings.announceImages;
@@ -485,6 +593,31 @@ async function loadVoices(selectedVoiceName) {
   renderVoices(response.voices, selectedVoiceName);
 }
 
+async function loadVoicevoxSpeakers({ showStatus = false } = {}) {
+  const response = await chrome.runtime.sendMessage({
+    type: "GET_VOICEVOX_SPEAKERS",
+    endpoint: voicevoxEndpointInput.value || currentSettings.voicevoxEndpoint
+  });
+
+  if (!response?.ok) {
+    voicevoxSpeakers = [...DEFAULT_VOICEVOX_SPEAKERS];
+    renderVoicevoxSpeakers(currentSettings.voicevoxSpeaker);
+    if (showStatus) {
+      setStatus(t("voicevoxLoadFailed"));
+    }
+    return false;
+  }
+
+  voicevoxSpeakers = Array.isArray(response.speakers) && response.speakers.length > 0
+    ? response.speakers
+    : [...DEFAULT_VOICEVOX_SPEAKERS];
+  renderVoicevoxSpeakers(currentSettings.voicevoxSpeaker);
+  if (showStatus) {
+    setStatus(t("voicevoxLoaded"));
+  }
+  return true;
+}
+
 async function readLatestMessage() {
   const tab = await getActiveDiscordTab();
   if (!tab) {
@@ -513,6 +646,9 @@ async function init() {
   const settings = await chrome.storage.sync.get(DEFAULT_SETTINGS);
   render(settings);
   await loadVoices(settings.voiceName);
+  if (settings.speechEngine === "voicevox") {
+    await loadVoicevoxSpeakers();
+  }
 
   const authorsRefreshed = await refreshAuthorsFromActiveTab();
   await loadLocalData();
@@ -532,10 +668,22 @@ async function init() {
     });
     await loadVoices("");
   });
+  speechEngineInput.addEventListener("change", async () => {
+    await updateSettings({ speechEngine: speechEngineInput.value });
+    if (speechEngineInput.value === "voicevox") {
+      await loadVoicevoxSpeakers({ showStatus: true });
+    }
+  });
   rateInput.addEventListener("input", () => updateSettings({ rate: Number(rateInput.value) }));
   pitchInput.addEventListener("input", () => updateSettings({ pitch: Number(pitchInput.value) }));
   volumeInput.addEventListener("input", () => updateSettings({ volume: Number(volumeInput.value) }));
   voiceNameInput.addEventListener("change", () => updateSettings({ voiceName: voiceNameInput.value }));
+  voicevoxEndpointInput.addEventListener("change", async () => {
+    await updateSettings({ voicevoxEndpoint: voicevoxEndpointInput.value.trim() || DEFAULT_SETTINGS.voicevoxEndpoint });
+    await loadVoicevoxSpeakers({ showStatus: true });
+  });
+  voicevoxSpeakerInput.addEventListener("change", () => updateSettings({ voicevoxSpeaker: Number(voicevoxSpeakerInput.value) }));
+  refreshVoicevoxButton.addEventListener("click", () => loadVoicevoxSpeakers({ showStatus: true }));
   readAuthorNameInput.addEventListener("change", () => updateSettings({ readAuthorName: readAuthorNameInput.checked }));
   announceLinksInput.addEventListener("change", () => updateSettings({ announceLinks: announceLinksInput.checked }));
   announceImagesInput.addEventListener("change", () => updateSettings({ announceImages: announceImagesInput.checked }));

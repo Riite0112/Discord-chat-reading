@@ -33,9 +33,30 @@
       </label>
 
       <label class="field">
+        <span id="speechEngineLabel"></span>
+        <select id="speechEngine"></select>
+      </label>
+
+      <label id="chromeVoiceField" class="field">
         <span id="voiceLabel"></span>
         <select id="voiceName"></select>
       </label>
+
+      <section id="voicevoxPanel" class="section voicevoxPanel" hidden>
+        <h2 id="voicevoxTitle"></h2>
+        <p id="voicevoxHint" class="panelHint"></p>
+        <label class="field">
+          <span id="voicevoxEndpointLabel"></span>
+          <input id="voicevoxEndpoint" type="text" spellcheck="false">
+        </label>
+        <label class="field">
+          <span id="voicevoxSpeakerLabel"></span>
+          <select id="voicevoxSpeaker"></select>
+        </label>
+        <div class="buttonRow single">
+          <button id="refreshVoicevoxButton" class="actionButton" type="button"></button>
+        </div>
+      </section>
 
       <label class="field">
         <span id="rateLabel"></span>

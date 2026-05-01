@@ -130,6 +130,7 @@ select {
 }
 
 select,
+input[type="text"],
 .actionButton {
   min-height: 40px;
   border: 1px solid #33405f;
@@ -138,8 +139,13 @@ select,
   color: #eef2ff;
 }
 
-select {
+select,
+input[type="text"] {
   padding: 8px 10px;
+}
+
+.voicevoxPanel[hidden] {
+  display: none;
 }
 
 .buttonRow {

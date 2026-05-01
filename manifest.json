@@ -10,11 +10,14 @@
     "128": "icons/icon-on-128.png"
   },
   "permissions": [
+    "offscreen",
     "storage",
     "tabs",
     "tts"
   ],
   "host_permissions": [
+    "http://127.0.0.1/*",
+    "http://localhost/*",
     "https://discord.com/*",
     "https://*.discord.com/*"
   ],

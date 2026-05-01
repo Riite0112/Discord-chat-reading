@@ -5,7 +5,10 @@ const DEFAULT_SETTINGS = {
   volume: 1,
   language: "ja",
   lang: "ja-JP",
+  speechEngine: "chrome",
   voiceName: "",
+  voicevoxEndpoint: "http://127.0.0.1:50021",
+  voicevoxSpeaker: 3,
   readAuthorName: true,
   announceLinks: true,
   announceImages: false,
@@ -44,6 +47,7 @@ function resetQueue() {
   queue = [];
   speaking = false;
   chrome.tts.stop();
+  chrome.runtime.sendMessage({ type: "STOP_OFFSCREEN_AUDIO" }).catch(() => {});
 }
 
 function pruneRecentQueueKeys(now = Date.now()) {
@@ -103,8 +107,127 @@ function buildSpeechOptions() {
   return options;
 }
 
+function normalizeVoicevoxEndpoint(endpoint) {
+  const fallback = DEFAULT_SETTINGS.voicevoxEndpoint;
+  try {
+    const url = new URL(endpoint || fallback);
+    if (url.protocol !== "http:" || !["127.0.0.1", "localhost"].includes(url.hostname)) {
+      return fallback;
+    }
+
+    url.pathname = "";
+    url.search = "";
+    url.hash = "";
+    return url.toString().replace(/\/$/, "");
+  } catch {
+    return fallback;
+  }
+}
+
+async function ensureOffscreenDocument() {
+  if (!chrome.offscreen) {
+    throw new Error("Offscreen documents are not available.");
+  }
+
+  const offscreenUrl = chrome.runtime.getURL("offscreen.html");
+  if (chrome.runtime.getContexts) {
+    const contexts = await chrome.runtime.getContexts({
+      contextTypes: ["OFFSCREEN_DOCUMENT"],
+      documentUrls: [offscreenUrl]
+    });
+    if (contexts.length > 0) {
+      return;
+    }
+  } else if (await chrome.offscreen.hasDocument()) {
+    return;
+  }
+
+  await chrome.offscreen.createDocument({
+    url: "offscreen.html",
+    reasons: ["AUDIO_PLAYBACK"],
+    justification: "Play locally generated VOICEVOX speech audio for Discord chat reading."
+  });
+}
+
+function bufferToBase64(arrayBuffer) {
+  const bytes = new Uint8Array(arrayBuffer);
+  const chunkSize = 0x8000;
+  let binary = "";
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    const chunk = bytes.subarray(index, index + chunkSize);
+    binary += String.fromCharCode(...chunk);
+  }
+  return btoa(binary);
+}
+
+async function getVoicevoxAudio(text) {
+  const endpoint = normalizeVoicevoxEndpoint(settings.voicevoxEndpoint);
+  const speaker = Number(settings.voicevoxSpeaker || DEFAULT_SETTINGS.voicevoxSpeaker);
+  const queryUrl = `${endpoint}/audio_query?text=${encodeURIComponent(text)}&speaker=${encodeURIComponent(speaker)}`;
+  const queryResponse = await fetch(queryUrl, { method: "POST" });
+  if (!queryResponse.ok) {
+    throw new Error(`VOICEVOX audio_query failed: ${queryResponse.status}`);
+  }
+
+  const audioQuery = await queryResponse.json();
+  audioQuery.speedScale = Number(settings.rate || 1);
+  audioQuery.volumeScale = Number(settings.volume || 1);
+  audioQuery.pitchScale = Math.max(-0.15, Math.min(0.15, (Number(settings.pitch || 1) - 1) * 0.15));
+
+  const synthesisUrl = `${endpoint}/synthesis?speaker=${encodeURIComponent(speaker)}`;
+  const synthesisResponse = await fetch(synthesisUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(audioQuery)
+  });
+  if (!synthesisResponse.ok) {
+    throw new Error(`VOICEVOX synthesis failed: ${synthesisResponse.status}`);
+  }
+
+  return synthesisResponse.arrayBuffer();
+}
+
+async function getVoicevoxSpeakers(endpoint = settings.voicevoxEndpoint) {
+  const safeEndpoint = normalizeVoicevoxEndpoint(endpoint);
+  const response = await fetch(`${safeEndpoint}/speakers`);
+  if (!response.ok) {
+    throw new Error(`VOICEVOX speakers failed: ${response.status}`);
+  }
+
+  const speakers = await response.json();
+  return speakers.flatMap((speaker) =>
+    Array.isArray(speaker.styles)
+      ? speaker.styles.map((style) => ({
+          id: Number(style.id),
+          name: `${speaker.name} - ${style.name}`
+        }))
+      : []
+  );
+}
+
+async function speakVoicevoxNow(text) {
+  speaking = true;
+  try {
+    const audioBuffer = await getVoicevoxAudio(text);
+    await ensureOffscreenDocument();
+    await chrome.runtime.sendMessage({
+      type: "PLAY_OFFSCREEN_AUDIO",
+      audioBase64: bufferToBase64(audioBuffer),
+      mimeType: "audio/wav"
+    });
+  } catch (error) {
+    console.warn(error);
+    chrome.tts.speak(text, buildSpeechOptions());
+  }
+}
+
 function speakNow(text) {
   speaking = true;
+  if (settings.speechEngine === "voicevox") {
+    speakVoicevoxNow(text);
+    return;
+  }
+
   chrome.tts.speak(text, buildSpeechOptions());
 }
 
@@ -192,11 +315,32 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message?.type === "GET_VOICEVOX_SPEAKERS") {
+    getVoicevoxSpeakers(message.endpoint)
+      .then((speakers) => sendResponse({ ok: true, speakers }))
+      .catch((error) => sendResponse({ ok: false, error: String(error) }));
+    return true;
+  }
+
   if (message?.type === "TEST_SPEECH") {
     if (typeof message.text === "string" && message.text.trim()) {
       resetQueue();
       speakNow(message.text.trim());
     }
+    sendResponse({ ok: true });
+    return;
+  }
+
+  if (message?.type === "OFFSCREEN_AUDIO_ENDED") {
+    speaking = false;
+    speakNext();
+    sendResponse({ ok: true });
+    return;
+  }
+
+  if (message?.type === "OFFSCREEN_AUDIO_ERROR") {
+    speaking = false;
+    speakNext();
     sendResponse({ ok: true });
   }
 });
