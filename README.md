@@ -59,5 +59,6 @@ Prototype Chrome extension for reading Discord Web chat aloud.
 - On page refresh, visible history is ignored and nothing is auto-read
 - Available voices depend on Chrome and the OS
 - VOICEVOX voices require the local VOICEVOX engine, usually at `http://127.0.0.1:50021`
+- VOICEVOX playback uses an offscreen audio document with retries so it is less likely to stop when the tab is in the background
 - This version cannot choose a physical speaker device directly
 - Audio output follows the current Chrome / OS default output device

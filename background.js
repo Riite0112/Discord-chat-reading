@@ -20,8 +20,15 @@ const DEFAULT_SETTINGS = {
 let settings = { ...DEFAULT_SETTINGS };
 let queue = [];
 let speaking = false;
+let voicevoxWatchdogTimer = 0;
+let voicevoxPlaybackToken = 0;
+let voicevoxPlaybackSequence = 0;
 const recentQueueKeys = new Map();
 const QUEUE_DEDUPE_TTL_MS = 12000;
+const OFFSCREEN_MESSAGE_RETRY_MS = 250;
+const OFFSCREEN_MESSAGE_ATTEMPTS = 4;
+const VOICEVOX_FETCH_TIMEOUT_MS = 6000;
+const VOICEVOX_PLAYBACK_TIMEOUT_MS = 75000;
 const ICON_PATHS = {
   on: {
     16: "icons/icon-on-16.png",
@@ -46,8 +53,32 @@ async function loadSettings() {
 function resetQueue() {
   queue = [];
   speaking = false;
+  voicevoxPlaybackToken = 0;
+  clearVoicevoxWatchdog();
   chrome.tts.stop();
   chrome.runtime.sendMessage({ type: "STOP_OFFSCREEN_AUDIO" }).catch(() => {});
+}
+
+function clearVoicevoxWatchdog() {
+  if (voicevoxWatchdogTimer) {
+    clearTimeout(voicevoxWatchdogTimer);
+    voicevoxWatchdogTimer = 0;
+  }
+}
+
+function startVoicevoxWatchdog(playbackToken) {
+  clearVoicevoxWatchdog();
+  voicevoxWatchdogTimer = setTimeout(() => {
+    if (playbackToken !== voicevoxPlaybackToken) {
+      return;
+    }
+
+    speaking = false;
+    voicevoxPlaybackToken = 0;
+    voicevoxWatchdogTimer = 0;
+    chrome.runtime.sendMessage({ type: "STOP_OFFSCREEN_AUDIO" }).catch(() => {});
+    speakNext();
+  }, VOICEVOX_PLAYBACK_TIMEOUT_MS);
 }
 
 function pruneRecentQueueKeys(now = Date.now()) {
@@ -124,6 +155,25 @@ function normalizeVoicevoxEndpoint(endpoint) {
   }
 }
 
+function delay(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = VOICEVOX_FETCH_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, {
+      ...options,
+      signal: controller.signal
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function ensureOffscreenDocument() {
   if (!chrome.offscreen) {
     throw new Error("Offscreen documents are not available.");
@@ -149,47 +199,9 @@ async function ensureOffscreenDocument() {
   });
 }
 
-function bufferToBase64(arrayBuffer) {
-  const bytes = new Uint8Array(arrayBuffer);
-  const chunkSize = 0x8000;
-  let binary = "";
-  for (let index = 0; index < bytes.length; index += chunkSize) {
-    const chunk = bytes.subarray(index, index + chunkSize);
-    binary += String.fromCharCode(...chunk);
-  }
-  return btoa(binary);
-}
-
-async function getVoicevoxAudio(text) {
-  const endpoint = normalizeVoicevoxEndpoint(settings.voicevoxEndpoint);
-  const speaker = Number(settings.voicevoxSpeaker || DEFAULT_SETTINGS.voicevoxSpeaker);
-  const queryUrl = `${endpoint}/audio_query?text=${encodeURIComponent(text)}&speaker=${encodeURIComponent(speaker)}`;
-  const queryResponse = await fetch(queryUrl, { method: "POST" });
-  if (!queryResponse.ok) {
-    throw new Error(`VOICEVOX audio_query failed: ${queryResponse.status}`);
-  }
-
-  const audioQuery = await queryResponse.json();
-  audioQuery.speedScale = Number(settings.rate || 1);
-  audioQuery.volumeScale = Number(settings.volume || 1);
-  audioQuery.pitchScale = Math.max(-0.15, Math.min(0.15, (Number(settings.pitch || 1) - 1) * 0.15));
-
-  const synthesisUrl = `${endpoint}/synthesis?speaker=${encodeURIComponent(speaker)}`;
-  const synthesisResponse = await fetch(synthesisUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(audioQuery)
-  });
-  if (!synthesisResponse.ok) {
-    throw new Error(`VOICEVOX synthesis failed: ${synthesisResponse.status}`);
-  }
-
-  return synthesisResponse.arrayBuffer();
-}
-
 async function getVoicevoxSpeakers(endpoint = settings.voicevoxEndpoint) {
   const safeEndpoint = normalizeVoicevoxEndpoint(endpoint);
-  const response = await fetch(`${safeEndpoint}/speakers`);
+  const response = await fetchWithTimeout(`${safeEndpoint}/speakers`);
   if (!response.ok) {
     throw new Error(`VOICEVOX speakers failed: ${response.status}`);
   }
@@ -205,17 +217,42 @@ async function getVoicevoxSpeakers(endpoint = settings.voicevoxEndpoint) {
   );
 }
 
+async function sendOffscreenMessage(message) {
+  let lastError = null;
+  for (let attempt = 1; attempt <= OFFSCREEN_MESSAGE_ATTEMPTS; attempt += 1) {
+    await ensureOffscreenDocument();
+    try {
+      return await chrome.runtime.sendMessage(message);
+    } catch (error) {
+      lastError = error;
+      await delay(OFFSCREEN_MESSAGE_RETRY_MS * attempt);
+    }
+  }
+
+  throw lastError || new Error("Could not reach offscreen audio document.");
+}
+
 async function speakVoicevoxNow(text) {
   speaking = true;
+  const playbackToken = ++voicevoxPlaybackSequence;
+  voicevoxPlaybackToken = playbackToken;
   try {
-    const audioBuffer = await getVoicevoxAudio(text);
-    await ensureOffscreenDocument();
-    await chrome.runtime.sendMessage({
-      type: "PLAY_OFFSCREEN_AUDIO",
-      audioBase64: bufferToBase64(audioBuffer),
-      mimeType: "audio/wav"
+    await sendOffscreenMessage({
+      type: "PLAY_VOICEVOX_SPEECH",
+      playbackToken,
+      text,
+      endpoint: normalizeVoicevoxEndpoint(settings.voicevoxEndpoint),
+      speaker: Number(settings.voicevoxSpeaker || DEFAULT_SETTINGS.voicevoxSpeaker),
+      rate: Number(settings.rate || 1),
+      pitch: Number(settings.pitch || 1),
+      volume: Number(settings.volume || 1)
     });
+    startVoicevoxWatchdog(playbackToken);
   } catch (error) {
+    if (playbackToken === voicevoxPlaybackToken) {
+      voicevoxPlaybackToken = 0;
+      clearVoicevoxWatchdog();
+    }
     console.warn(error);
     chrome.tts.speak(text, buildSpeechOptions());
   }
@@ -332,6 +369,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message?.type === "OFFSCREEN_AUDIO_ENDED") {
+    if (message.playbackToken && message.playbackToken !== voicevoxPlaybackToken) {
+      sendResponse({ ok: true, stale: true });
+      return;
+    }
+
+    clearVoicevoxWatchdog();
+    voicevoxPlaybackToken = 0;
     speaking = false;
     speakNext();
     sendResponse({ ok: true });
@@ -339,8 +383,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message?.type === "OFFSCREEN_AUDIO_ERROR") {
-    speaking = false;
-    speakNext();
+    if (message.playbackToken && message.playbackToken !== voicevoxPlaybackToken) {
+      sendResponse({ ok: true, stale: true });
+      return;
+    }
+
+    clearVoicevoxWatchdog();
+    voicevoxPlaybackToken = 0;
+    if (settings.enabled && typeof message.fallbackText === "string" && message.fallbackText.trim()) {
+      speaking = true;
+      chrome.tts.speak(message.fallbackText.trim(), buildSpeechOptions());
+    } else {
+      speaking = false;
+      speakNext();
+    }
     sendResponse({ ok: true });
   }
 });
