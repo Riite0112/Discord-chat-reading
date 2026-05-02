@@ -107,6 +107,9 @@ let settings = { ...DEFAULT_SETTINGS };
 let authorSyncTimer = 0;
 let hydrationTimer = 0;
 let mutationTimer = 0;
+let urlWatchTimer = 0;
+let messageObserver = null;
+let extensionContextAlive = true;
 let isHydrating = false;
 let spokenLog = [];
 const recentMessageKeys = new Map();
@@ -115,6 +118,105 @@ let historyCutoffMessageId = null;
 let historyCutoffTimestampMs = 0;
 let historyGuardUntil = 0;
 let lastSpokenAuthor = "";
+
+function isExtensionContextInvalidatedError(error) {
+  const message = String(error?.message || error || "");
+  return message.includes("Extension context invalidated");
+}
+
+function stopExtensionWork() {
+  extensionContextAlive = false;
+  window.clearTimeout(authorSyncTimer);
+  window.clearTimeout(hydrationTimer);
+  window.clearTimeout(mutationTimer);
+  window.clearInterval(urlWatchTimer);
+  messageObserver?.disconnect();
+  messageObserver = null;
+}
+
+function handleChromeApiError(error) {
+  if (isExtensionContextInvalidatedError(error)) {
+    stopExtensionWork();
+  }
+}
+
+function canUseChromeApi() {
+  if (!extensionContextAlive) {
+    return false;
+  }
+
+  try {
+    return typeof chrome !== "undefined" && Boolean(chrome.runtime?.id);
+  } catch (error) {
+    handleChromeApiError(error);
+    return false;
+  }
+}
+
+async function safeRuntimeSendMessage(message) {
+  if (!canUseChromeApi() || !chrome.runtime?.sendMessage) {
+    return null;
+  }
+
+  try {
+    return await chrome.runtime.sendMessage(message);
+  } catch (error) {
+    handleChromeApiError(error);
+    return null;
+  }
+}
+
+async function safeStorageLocalGet(defaultValue) {
+  if (!canUseChromeApi() || !chrome.storage?.local?.get) {
+    return defaultValue;
+  }
+
+  try {
+    return await chrome.storage.local.get(defaultValue);
+  } catch (error) {
+    handleChromeApiError(error);
+    return defaultValue;
+  }
+}
+
+function safeStorageLocalSet(values) {
+  if (!canUseChromeApi() || !chrome.storage?.local?.set) {
+    return;
+  }
+
+  try {
+    const result = chrome.storage.local.set(values);
+    if (result && typeof result.catch === "function") {
+      result.catch(handleChromeApiError);
+    }
+  } catch (error) {
+    handleChromeApiError(error);
+  }
+}
+
+function safeAddRuntimeMessageListener(listener) {
+  if (!canUseChromeApi() || !chrome.runtime?.onMessage?.addListener) {
+    return;
+  }
+
+  try {
+    chrome.runtime.onMessage.addListener(listener);
+  } catch (error) {
+    handleChromeApiError(error);
+  }
+}
+
+function safeAddStorageChangeListener(listener) {
+  if (!canUseChromeApi() || !chrome.storage?.onChanged?.addListener) {
+    return;
+  }
+
+  try {
+    chrome.storage.onChanged.addListener(listener);
+  } catch (error) {
+    handleChromeApiError(error);
+  }
+}
 
 function isElement(value) {
   return value instanceof Element;
@@ -446,13 +548,13 @@ function syncRecentSpeechKeysFromLog() {
 }
 
 async function loadSpokenLog() {
-  const stored = await chrome.storage.local.get({ spokenLog: [] });
+  const stored = await safeStorageLocalGet({ spokenLog: [] });
   spokenLog = Array.isArray(stored.spokenLog) ? stored.spokenLog.slice(0, MAX_LOG_ENTRIES) : [];
   syncRecentSpeechKeysFromLog();
 }
 
 function persistSpokenLog() {
-  chrome.storage.local.set({ spokenLog });
+  safeStorageLocalSet({ spokenLog });
 }
 
 function hasRecentSpeech(parsed) {
@@ -500,7 +602,7 @@ function rememberLastSpokenAuthor(parsed) {
 }
 
 function queueSpeech(text) {
-  chrome.runtime.sendMessage({
+  safeRuntimeSendMessage({
     type: "QUEUE_SPEECH",
     text
   });
@@ -677,7 +779,7 @@ function handleMessageElement(messageElement) {
   rememberRecentText(parsed);
   rememberSpeech(parsed);
   rememberLastSpokenAuthor(parsed);
-  chrome.runtime.sendMessage({
+  safeRuntimeSendMessage({
     type: "QUEUE_SPEECH",
     text: parsed.speechText,
     dedupeKey: parsed.dedupeKey
@@ -705,13 +807,25 @@ function processRecentMessages() {
 }
 
 function scheduleMutationProcessing() {
+  if (!extensionContextAlive) {
+    return;
+  }
+
   window.clearTimeout(mutationTimer);
   mutationTimer = window.setTimeout(() => {
+    if (!extensionContextAlive) {
+      return;
+    }
+
     processRecentMessages();
   }, MUTATION_SETTLE_MS);
 }
 
 function handleMutations(mutations) {
+  if (!extensionContextAlive) {
+    return;
+  }
+
   let hasMessageRelatedChange = false;
 
   for (const mutation of mutations) {
@@ -742,6 +856,10 @@ function handleMutations(mutations) {
 }
 
 function syncKnownAuthors() {
+  if (!extensionContextAlive) {
+    return;
+  }
+
   const authors = [];
   const seenAuthors = new Set();
 
@@ -755,12 +873,20 @@ function syncKnownAuthors() {
     authors.push(author);
   }
 
-  chrome.storage.local.set({ knownAuthors: authors });
+  safeStorageLocalSet({ knownAuthors: authors });
 }
 
 function scheduleAuthorSync() {
+  if (!extensionContextAlive) {
+    return;
+  }
+
   window.clearTimeout(authorSyncTimer);
   authorSyncTimer = window.setTimeout(() => {
+    if (!extensionContextAlive) {
+      return;
+    }
+
     syncKnownAuthors();
   }, 300);
 }
@@ -788,6 +914,10 @@ function getLatestParsedMessage(forceReplay = false) {
 }
 
 function readLatestVisibleMessage(forceReplay = false) {
+  if (!extensionContextAlive) {
+    return null;
+  }
+
   const parsed = getLatestParsedMessage(forceReplay);
   if (!parsed) {
     return null;
@@ -806,6 +936,10 @@ function readLatestVisibleMessage(forceReplay = false) {
 }
 
 function beginHydration(resetSeen = false) {
+  if (!extensionContextAlive) {
+    return;
+  }
+
   if (resetSeen) {
     seenMessages.clear();
     lastSpokenAuthor = "";
@@ -823,6 +957,10 @@ function beginHydration(resetSeen = false) {
   markMessagesAsSeen(messageElements);
 
   hydrationTimer = window.setTimeout(() => {
+    if (!extensionContextAlive) {
+      return;
+    }
+
     const currentMessages = getAllCurrentMessageElements();
     refreshHistoricalBoundary(currentMessages);
     markMessagesAsSeen(currentMessages);
@@ -832,14 +970,18 @@ function beginHydration(resetSeen = false) {
 }
 
 async function loadSettings() {
-  const response = await chrome.runtime.sendMessage({ type: "GET_SETTINGS" }).catch(() => null);
+  const response = await safeRuntimeSendMessage({ type: "GET_SETTINGS" });
   if (response?.ok) {
     settings = { ...settings, ...response.settings };
   }
 }
 
 function watchUrlChanges() {
-  window.setInterval(() => {
+  urlWatchTimer = window.setInterval(() => {
+    if (!extensionContextAlive) {
+      return;
+    }
+
     if (location.href === currentUrl) {
       return;
     }
@@ -853,18 +995,22 @@ function watchUrlChanges() {
 }
 
 function startObserver() {
-  const observer = new MutationObserver(handleMutations);
-  observer.observe(document.body, {
+  messageObserver = new MutationObserver(handleMutations);
+  messageObserver.observe(document.body, {
     childList: true,
     subtree: true
   });
 }
 
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+function handleRuntimeMessage(message, sender, sendResponse) {
+  if (!extensionContextAlive) {
+    return;
+  }
+
   if (message?.type === "READ_LATEST_MESSAGE") {
     const speechText = readLatestVisibleMessage(Boolean(message.forceReplay));
     if (speechText) {
-      chrome.runtime.sendMessage({ type: "TEST_SPEECH", text: speechText });
+      safeRuntimeSendMessage({ type: "TEST_SPEECH", text: speechText });
       sendResponse({ ok: true, speechText });
     } else {
       sendResponse({ ok: false });
@@ -876,13 +1022,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     syncKnownAuthors();
     sendResponse({ ok: true });
   }
-});
+}
 
 async function init() {
   await loadSettings();
   await loadSpokenLog();
+  if (!extensionContextAlive) {
+    return;
+  }
 
-  chrome.storage.onChanged.addListener((changes, areaName) => {
+  safeAddRuntimeMessageListener(handleRuntimeMessage);
+  safeAddStorageChangeListener((changes, areaName) => {
     if (areaName !== "sync") {
       return;
     }
@@ -899,7 +1049,9 @@ async function init() {
 }
 
 if (document.readyState === "loading") {
-  window.addEventListener("DOMContentLoaded", init, { once: true });
+  window.addEventListener("DOMContentLoaded", () => {
+    init().catch(handleChromeApiError);
+  }, { once: true });
 } else {
-  init();
+  init().catch(handleChromeApiError);
 }
